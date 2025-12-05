@@ -46,3 +46,10 @@ app.*.map.json
 
 # Supabase credentials (IMPORTANT: Keep this secure!)
 lib/supabase_config.dart
+
+# Google Cloud credentials (IMPORTANT: Keep this secure!)
+lib/gcp_config.dart
+
+# Backend environment variables (IMPORTANT: Keep this secure!)
+backend/.env
+backend/node_modules/
