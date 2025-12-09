@@ -20,15 +20,38 @@ const pool = new Pool({
   ssl: {
     rejectUnauthorized: false,
   },
+  connectionTimeoutMillis: 5000, // 5 second timeout
+  idleTimeoutMillis: 30000,
+  max: 10,
 });
 
 // Test database connection
 pool.connect((err, client, release) => {
   if (err) {
-    console.error('❌ Error connecting to the database:', err.stack);
+    console.error('❌ Error connecting to the database:', err.message);
+    console.error('📋 Please check:');
+    console.error('   1. Is your Cloud SQL instance running?');
+    console.error('   2. Is billing enabled on your Google Cloud project?');
+    console.error('   3. Is your IP address whitelisted?');
+    console.error('   4. Check your .env file has correct credentials');
+    console.error('\n💡 To fix: Enable billing at https://console.cloud.google.com/billing');
   } else {
     console.log('✅ Connected to Google Cloud SQL');
     release();
+  }
+});
+
+// Health check endpoint
+app.get('/api/health', async (req, res) => {
+  try {
+    await pool.query('SELECT 1');
+    res.json({ status: 'ok', message: 'Database connection successful' });
+  } catch (error) {
+    res.status(500).json({ 
+      status: 'error', 
+      message: error.message,
+      hint: 'Check if your Cloud SQL instance is running and billing is enabled'
+    });
   }
 });
 
@@ -147,21 +170,11 @@ app.put('/api/customers/:id', async (req, res) => {
 // RESTAURANT ENDPOINTS
 // ===========================
 
-// Health check endpoint
-app.get('/api/health', async (req, res) => {
-  try {
-    const result = await pool.query('SELECT 1');
-    res.json({ status: 'ok', message: 'Database connection successful' });
-  } catch (error) {
-    res.status(500).json({ status: 'error', message: error.message });
-  }
-});
-
 // Get all restaurants
 app.get('/api/restaurants', async (req, res) => {
   try {
     const result = await pool.query(
-      'SELECT * FROM Restaurant WHERE is_active = true ORDER BY rating DESC'
+      'SELECT * FROM Restaurant ORDER BY rating DESC'
     );
     res.json(result.rows);
   } catch (error) {
@@ -190,18 +203,27 @@ app.get('/api/restaurants/:id', async (req, res) => {
   }
 });
 
-// Search restaurants by food item
+// Search restaurants by food item, restaurant name, or location
 app.get('/api/restaurants/search/:query', async (req, res) => {
   try {
     const { query } = req.params;
+    
+    // Require at least 2 characters to search
+    if (!query || query.trim().length < 2) {
+      return res.json([]);
+    }
+    
+    const searchPattern = `%${query}%`;
     const result = await pool.query(
       `SELECT DISTINCT r.* 
        FROM Restaurant r
-       JOIN Menu_Item mi ON r.restaurant_id = mi.restaurant_id
-       WHERE r.is_active = true 
-       AND (mi.item_name ILIKE $1 OR mi.description ILIKE $1)
+       LEFT JOIN Menu_Item mi ON r.restaurant_id = mi.restaurant_id
+       WHERE r.name ILIKE $1 
+          OR r.location ILIKE $1
+          OR mi.item_name ILIKE $1 
+          OR mi.description ILIKE $1
        ORDER BY r.rating DESC`,
-      [`%${query}%`]
+      [searchPattern]
     );
     res.json(result.rows);
   } catch (error) {
@@ -219,17 +241,26 @@ app.get('/api/restaurants/:id/menu', async (req, res) => {
   try {
     const { id } = req.params;
     const result = await pool.query(
-      `SELECT mi.*, c.category_name, sc.sub_category_name
+      `SELECT mi.*, sc.sub_category_name, c.category_name, c.category_id
        FROM Menu_Item mi
-       JOIN Sub_Category sc ON mi.sub_category_id = sc.sub_category_id
-       JOIN Category c ON sc.category_id = c.category_id
-       WHERE mi.restaurant_id = $1 AND mi.is_available = true 
-       ORDER BY c.category_name, sc.sub_category_name, mi.item_name`,
+       LEFT JOIN Sub_Category sc ON mi.sub_category_id = sc.sub_category_id
+       LEFT JOIN Category c ON sc.category_id = c.category_id
+       WHERE mi.restaurant_id = $1 AND mi.is_available = true
+       ORDER BY 
+         CASE c.category_id 
+           WHEN 5 THEN 1  -- Appetizers/Starters first
+           WHEN 4 THEN 2  -- Main Course second
+           WHEN 1 THEN 3  -- Fast Food third
+           WHEN 3 THEN 4  -- Desserts fourth
+           WHEN 2 THEN 5  -- Beverages last
+           ELSE 6
+         END,
+         mi.item_name`,
       [id]
     );
     res.json(result.rows);
   } catch (error) {
-    console.error('Error fetching menu items:', error);
+    console.error('Error fetching menu:', error);
     res.status(500).json({ error: error.message });
   }
 });

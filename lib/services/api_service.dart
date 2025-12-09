@@ -191,7 +191,7 @@ class ApiService {
   static Future<List<dynamic>> searchRestaurants(String query) async {
     try {
       final response = await http.get(
-        Uri.parse('$baseUrl/restaurants/search?q=$query'),
+        Uri.parse('$baseUrl/restaurants/search/${Uri.encodeComponent(query)}'),
       );
 
       if (response.statusCode == 200) {

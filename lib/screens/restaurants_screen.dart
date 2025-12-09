@@ -123,6 +123,34 @@ class RestaurantCard extends StatelessWidget {
     required this.customer,
   }) : super(key: key);
 
+  // Get image URL based on restaurant name
+  String getRestaurantImage(String name) {
+    final imageMap = {
+      'Pizza Paradise':
+          'https://images.unsplash.com/photo-1513104890138-7c749659a591?w=800&q=80',
+      'Burger Barn':
+          'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=800&q=80',
+      'Sushi Supreme':
+          'https://images.unsplash.com/photo-1579584425555-c3ce17fd4351?w=800&q=80',
+      'Taco Town':
+          'https://images.unsplash.com/photo-1565299585323-38d6b0865b47?w=800&q=80',
+      'Desi Delights':
+          'https://images.unsplash.com/photo-1585937421612-70a008356fbe?w=800&q=80',
+      'Chinese Wok':
+          'https://images.unsplash.com/photo-1526318896980-cf78c088247c?w=800&q=80',
+      'Pasta Palace':
+          'https://images.unsplash.com/photo-1621996346565-e3dbc646d9a9?w=800&q=80',
+      'BBQ Tonight':
+          'https://images.unsplash.com/photo-1555939594-58d7cb561ad1?w=800&q=80',
+      'Cafe Delight':
+          'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=800&q=80',
+      'Biryani House':
+          'https://images.unsplash.com/photo-1563379091339-03b21ab4a4f8?w=800&q=80',
+    };
+    return imageMap[name] ??
+        'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&q=80';
+  }
+
   @override
   Widget build(BuildContext context) {
     return Card(
@@ -147,20 +175,112 @@ class RestaurantCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Restaurant Image
-            Container(
-              height: 150,
-              decoration: BoxDecoration(
-                borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(16),
-                  topRight: Radius.circular(16),
+            Stack(
+              children: [
+                Container(
+                  height: 180,
+                  decoration: BoxDecoration(
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(16),
+                      topRight: Radius.circular(16),
+                    ),
+                    image: DecorationImage(
+                      image: NetworkImage(
+                        getRestaurantImage(restaurant['name'] ?? ''),
+                      ),
+                      fit: BoxFit.cover,
+                      onError: (exception, stackTrace) {
+                        // Fallback to gradient if image fails
+                      },
+                    ),
+                  ),
                 ),
-                gradient: LinearGradient(
-                  colors: [Colors.deepOrange.shade300, Colors.orange.shade200],
+                // Dark overlay for better text readability
+                Container(
+                  height: 180,
+                  decoration: BoxDecoration(
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(16),
+                      topRight: Radius.circular(16),
+                    ),
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Colors.transparent,
+                        Colors.black.withOpacity(0.3),
+                      ],
+                    ),
+                  ),
                 ),
-              ),
-              child: const Center(
-                child: Icon(Icons.restaurant, size: 60, color: Colors.white),
-              ),
+                // Restaurant name badge on image
+                Positioned(
+                  bottom: 12,
+                  left: 12,
+                  right: 12,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.95),
+                      borderRadius: BorderRadius.circular(8),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.1),
+                          blurRadius: 4,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            restaurant['name'] ?? 'Unknown',
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.black87,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.green.shade100,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(
+                                Icons.star,
+                                size: 16,
+                                color: Colors.amber,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                restaurant['rating']?.toString() ?? '0.0',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.green.shade700,
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
             ),
             Padding(
               padding: const EdgeInsets.all(16),
@@ -168,60 +288,18 @@ class RestaurantCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(
-                        child: Text(
-                          restaurant['name'] ?? 'Unknown',
-                          style: const TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.green.shade100,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Row(
-                          children: [
-                            const Icon(
-                              Icons.star,
-                              size: 16,
-                              color: Colors.amber,
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              restaurant['rating']?.toString() ?? '0.0',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: Colors.green.shade700,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
                     children: [
                       Icon(
                         Icons.location_on,
-                        size: 16,
-                        color: Colors.grey.shade600,
+                        size: 18,
+                        color: Colors.deepOrange,
                       ),
                       const SizedBox(width: 4),
                       Expanded(
                         child: Text(
                           restaurant['location'] ?? 'Unknown location',
                           style: TextStyle(
-                            color: Colors.grey.shade600,
+                            color: Colors.grey.shade700,
                             fontSize: 14,
                           ),
                         ),
@@ -233,15 +311,16 @@ class RestaurantCard extends StatelessWidget {
                     children: [
                       Icon(
                         Icons.access_time,
-                        size: 16,
-                        color: Colors.grey.shade600,
+                        size: 18,
+                        color: Colors.deepOrange,
                       ),
                       const SizedBox(width: 4),
                       Text(
                         '${restaurant['opening_time']?.toString().substring(0, 5) ?? '00:00'} - ${restaurant['closing_time']?.toString().substring(0, 5) ?? '00:00'}',
                         style: TextStyle(
-                          color: Colors.grey.shade600,
+                          color: Colors.grey.shade700,
                           fontSize: 14,
+                          fontWeight: FontWeight.w500,
                         ),
                       ),
                     ],
