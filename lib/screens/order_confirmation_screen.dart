@@ -4,7 +4,6 @@ import '../models/customer.dart';
 import '../providers/cart_provider.dart';
 import '../services/api_service.dart';
 import 'order_tracking_screen.dart';
-import 'home_screen.dart';
 
 class OrderConfirmationScreen extends StatefulWidget {
   final Customer customer;
@@ -75,6 +74,7 @@ class _OrderConfirmationScreenState extends State<OrderConfirmationScreen> {
               (context) => OrderTrackingScreen(
                 orderId: orderData['order_id'],
                 restaurantName: cartProvider.restaurantName ?? 'Restaurant',
+                customer: widget.customer,
               ),
         ),
         (route) => false, // Remove all previous routes

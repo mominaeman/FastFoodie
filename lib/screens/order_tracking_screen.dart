@@ -1,15 +1,19 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
 import '../services/api_service.dart';
+import '../models/customer.dart';
+import 'home_screen.dart';
 
 class OrderTrackingScreen extends StatefulWidget {
   final int orderId;
   final String restaurantName;
+  final Customer customer;
 
   const OrderTrackingScreen({
     Key? key,
     required this.orderId,
     required this.restaurantName,
+    required this.customer,
   }) : super(key: key);
 
   @override
@@ -124,6 +128,137 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen>
     _timer?.cancel();
     _animationController.dispose();
     super.dispose();
+  }
+
+  void _showRatingDialog() {
+    int selectedRating = 5;
+    final TextEditingController feedbackController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: const Column(
+            children: [
+              Icon(Icons.star, size: 40, color: Colors.amber),
+              SizedBox(height: 8),
+              Text(
+                'Rate Your Order',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'How was your experience?',
+                  style: TextStyle(color: Colors.grey),
+                ),
+                const SizedBox(height: 16),
+                // Star Rating
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: List.generate(5, (index) {
+                    return IconButton(
+                      icon: Icon(
+                        index < selectedRating ? Icons.star : Icons.star_border,
+                        size: 40,
+                        color: Colors.amber,
+                      ),
+                      onPressed: () {
+                        setState(() {
+                          selectedRating = index + 1;
+                        });
+                      },
+                    );
+                  }),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  selectedRating == 5
+                      ? 'Excellent!'
+                      : selectedRating == 4
+                          ? 'Good'
+                          : selectedRating == 3
+                              ? 'Average'
+                              : selectedRating == 2
+                                  ? 'Below Average'
+                                  : 'Poor',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: selectedRating >= 4 ? Colors.green : Colors.orange,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                // Feedback TextField
+                TextField(
+                  controller: feedbackController,
+                  maxLines: 3,
+                  decoration: InputDecoration(
+                    hintText: 'Share your feedback (optional)',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(
+                        color: Colors.deepOrange,
+                        width: 2,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(context);
+                // Show thank you message
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Row(
+                      children: [
+                        const Icon(Icons.check_circle, color: Colors.white),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Thank you for your $selectedRating-star rating!',
+                        ),
+                      ],
+                    ),
+                    backgroundColor: Colors.green,
+                    duration: const Duration(seconds: 3),
+                  ),
+                );
+                // TODO: Send rating to backend
+                // ApiService.rateOrder(widget.orderId, selectedRating, feedbackController.text);
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.deepOrange,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              child: const Text(
+                'Submit',
+                style: TextStyle(color: Colors.white),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -350,51 +485,58 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen>
           ),
 
           // Action Buttons
-          if (currentStep == orderSteps.length - 1)
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                children: [
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      onPressed: () {
-                        Navigator.pop(context);
-                      },
-                      icon: const Icon(Icons.home, color: Colors.white),
-                      label: const Text(
-                        'Back to Home',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              children: [
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      // Navigate back to home screen
+                      Navigator.of(context).pushAndRemoveUntil(
+                        MaterialPageRoute(
+                          builder: (context) => HomeScreen(customer: widget.customer),
                         ),
+                        (route) => false,
+                      );
+                    },
+                    icon: const Icon(Icons.home, color: Colors.white),
+                    label: const Text(
+                      'Back to Home',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
                       ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.deepOrange,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.deepOrange,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
                       ),
                     ),
                   ),
-                  const SizedBox(height: 8),
-                  TextButton.icon(
-                    onPressed: () {
-                      // TODO: Implement rate order
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Rating feature coming soon!'),
-                        ),
-                      );
-                    },
+                ),
+                if (currentStep == orderSteps.length - 1) const SizedBox(height: 8),
+                if (currentStep == orderSteps.length - 1)
+                  OutlinedButton.icon(
+                    onPressed: () => _showRatingDialog(),
                     icon: const Icon(Icons.star_outline),
                     label: const Text('Rate Order'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.deepOrange,
+                      side: const BorderSide(color: Colors.deepOrange),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
                   ),
-                ],
-              ),
+              ],
             ),
+          ),
         ],
       ),
     );
