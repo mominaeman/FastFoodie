@@ -159,7 +159,7 @@ class ApiService {
   static Future<List<dynamic>> getUserOrders(int userId) async {
     try {
       final response = await http.get(
-        Uri.parse('$baseUrl/users/$userId/orders'),
+        Uri.parse('$baseUrl/customers/$userId/orders'),
       );
 
       if (response.statusCode == 200) {
