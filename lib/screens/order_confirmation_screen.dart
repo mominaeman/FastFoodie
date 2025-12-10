@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../models/customer.dart';
 import '../providers/cart_provider.dart';
 import '../services/api_service.dart';
+import 'order_tracking_screen.dart';
 import 'home_screen.dart';
 
 class OrderConfirmationScreen extends StatefulWidget {
@@ -55,6 +56,11 @@ class _OrderConfirmationScreenState extends State<OrderConfirmationScreen> {
         totalAmount: totalAmount,
         deliveryAddress: widget.deliveryAddress,
         items: cartProvider.getOrderItems(),
+        paymentMethod: widget.paymentMethod,
+        specialInstructions:
+            widget.deliveryInstructions.isNotEmpty
+                ? widget.deliveryInstructions
+                : null,
       );
 
       // Clear cart after successful order
@@ -62,50 +68,16 @@ class _OrderConfirmationScreenState extends State<OrderConfirmationScreen> {
 
       if (!mounted) return;
 
-      // Show success dialog
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder:
-            (context) => AlertDialog(
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.check_circle, color: Colors.green, size: 80),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'Order Placed Successfully!',
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Order ID: #${orderData['order']['order_id']}',
-                    style: TextStyle(color: Colors.grey.shade600),
-                  ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'Your order has been placed and will be delivered soon!',
-                    textAlign: TextAlign.center,
-                  ),
-                ],
+      // Navigate to order tracking screen
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(
+          builder:
+              (context) => OrderTrackingScreen(
+                orderId: orderData['order_id'],
+                restaurantName: cartProvider.restaurantName ?? 'Restaurant',
               ),
-              actions: [
-                TextButton(
-                  onPressed: () {
-                    // Navigate back to home and clear all previous routes
-                    Navigator.of(context).pushAndRemoveUntil(
-                      MaterialPageRoute(
-                        builder:
-                            (context) => HomeScreen(customer: widget.customer),
-                      ),
-                      (route) => false,
-                    );
-                  },
-                  child: const Text('OK'),
-                ),
-              ],
-            ),
+        ),
+        (route) => false, // Remove all previous routes
       );
     } catch (e) {
       setState(() {

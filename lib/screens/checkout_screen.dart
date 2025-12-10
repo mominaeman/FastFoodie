@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/customer.dart';
 import '../providers/cart_provider.dart';
+import '../services/api_service.dart';
+import 'addresses_screen.dart';
 import 'order_confirmation_screen.dart';
 
 class CheckoutScreen extends StatefulWidget {
@@ -15,30 +17,68 @@ class CheckoutScreen extends StatefulWidget {
 
 class _CheckoutScreenState extends State<CheckoutScreen> {
   String selectedAddress = '';
+  int? selectedAddressId;
   String selectedPaymentMethod = 'COD';
   final TextEditingController _deliveryInstructionsController =
       TextEditingController();
 
-  final List<Map<String, String>> savedAddresses = [
-    {'label': 'Home', 'address': 'House 123, Street 4, Karachi'},
-    {'label': 'Work', 'address': 'Office 5, Floor 2, IT Tower, Lahore'},
-    {'label': 'Other', 'address': 'Apartment 7B, Building 3, Islamabad'},
-  ];
+  List<Map<String, dynamic>> savedAddresses = [];
+  bool _isLoadingAddresses = true;
 
   @override
   void initState() {
     super.initState();
-    // Set default address from customer profile
-    selectedAddress =
-        widget.customer.address.isNotEmpty
-            ? widget.customer.address
-            : savedAddresses.first['address']!;
+    _loadAddresses();
+  }
+
+  Future<void> _loadAddresses() async {
+    try {
+      setState(() => _isLoadingAddresses = true);
+      final result = await ApiService.getCustomerAddresses(
+        widget.customer.customerId,
+      );
+      setState(() {
+        savedAddresses = List<Map<String, dynamic>>.from(result);
+        _isLoadingAddresses = false;
+
+        // Set default address as selected
+        if (savedAddresses.isNotEmpty) {
+          final defaultAddr = savedAddresses.firstWhere(
+            (addr) => addr['is_default'] == true,
+            orElse: () => savedAddresses.first,
+          );
+          selectedAddress = defaultAddr['address_line'];
+          selectedAddressId = defaultAddr['address_id'];
+        }
+      });
+    } catch (e) {
+      setState(() => _isLoadingAddresses = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error loading addresses: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   @override
   void dispose() {
     _deliveryInstructionsController.dispose();
     super.dispose();
+  }
+
+  Future<void> _navigateToAddressScreen() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => AddressesScreen(customer: widget.customer),
+      ),
+    );
+    // Reload addresses when returning from address screen
+    _loadAddresses();
   }
 
   void _proceedToConfirmation() {
@@ -101,39 +141,89 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                   ),
                   const SizedBox(height: 16),
 
-                  // Address Selection
-                  ...savedAddresses.map(
-                    (addr) => RadioListTile<String>(
-                      value: addr['address']!,
-                      groupValue: selectedAddress,
-                      onChanged: (value) {
-                        setState(() {
-                          selectedAddress = value!;
-                        });
-                      },
-                      title: Text(
-                        addr['label']!,
-                        style: const TextStyle(fontWeight: FontWeight.bold),
+                  // Loading or Address Selection
+                  _isLoadingAddresses
+                      ? const Center(
+                        child: Padding(
+                          padding: EdgeInsets.all(16.0),
+                          child: CircularProgressIndicator(),
+                        ),
+                      )
+                      : savedAddresses.isEmpty
+                      ? Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        child: Column(
+                          children: [
+                            Text(
+                              'No saved addresses',
+                              style: TextStyle(color: Colors.grey.shade600),
+                            ),
+                            const SizedBox(height: 8),
+                            TextButton.icon(
+                              onPressed: _navigateToAddressScreen,
+                              icon: const Icon(Icons.add),
+                              label: const Text('Add Address'),
+                            ),
+                          ],
+                        ),
+                      )
+                      : Column(
+                        children:
+                            savedAddresses
+                                .map(
+                                  (addr) => RadioListTile<String>(
+                                    value: addr['address_line']!,
+                                    groupValue: selectedAddress,
+                                    onChanged: (value) {
+                                      setState(() {
+                                        selectedAddress = value!;
+                                        selectedAddressId = addr['address_id'];
+                                      });
+                                    },
+                                    title: Row(
+                                      children: [
+                                        Text(
+                                          addr['label']!,
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                        if (addr['is_default'] == true) ...[
+                                          const SizedBox(width: 8),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 6,
+                                              vertical: 2,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: Colors.green.shade100,
+                                              borderRadius:
+                                                  BorderRadius.circular(8),
+                                            ),
+                                            child: Text(
+                                              'Default',
+                                              style: TextStyle(
+                                                fontSize: 10,
+                                                color: Colors.green.shade700,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ],
+                                    ),
+                                    subtitle: Text(addr['address_line']!),
+                                    activeColor: Colors.deepOrange,
+                                  ),
+                                )
+                                .toList(),
                       ),
-                      subtitle: Text(addr['address']!),
-                      activeColor: Colors.deepOrange,
-                    ),
-                  ),
 
                   // Add New Address Button
                   TextButton.icon(
-                    onPressed: () {
-                      // TODO: Navigate to add address screen
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text(
-                            'Add address functionality coming soon!',
-                          ),
-                        ),
-                      );
-                    },
+                    onPressed: _navigateToAddressScreen,
                     icon: const Icon(Icons.add),
-                    label: const Text('Add New Address'),
+                    label: const Text('Manage Addresses'),
                   ),
                 ],
               ),

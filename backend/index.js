@@ -167,6 +167,171 @@ app.put('/api/customers/:id', async (req, res) => {
 });
 
 // ===========================
+// ADDRESS ENDPOINTS
+// ===========================
+
+// Get all addresses for a customer
+app.get('/api/customers/:id/addresses', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await pool.query(
+      `SELECT address_id, customer_id, label, address_line, is_default, created_at 
+       FROM Address 
+       WHERE customer_id = $1 
+       ORDER BY is_default DESC, created_at ASC`,
+      [id]
+    );
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Error fetching addresses:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Add new address for a customer
+app.post('/api/customers/:id/addresses', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { label, address_line, is_default } = req.body;
+
+    // If this is set as default, unset all other defaults for this customer
+    if (is_default) {
+      await pool.query(
+        'UPDATE Address SET is_default = FALSE WHERE customer_id = $1',
+        [id]
+      );
+    }
+
+    const result = await pool.query(
+      `INSERT INTO Address (customer_id, label, address_line, is_default) 
+       VALUES ($1, $2, $3, $4) 
+       RETURNING address_id, customer_id, label, address_line, is_default, created_at`,
+      [id, label, address_line, is_default || false]
+    );
+
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('Error adding address:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Update an address
+app.put('/api/addresses/:addressId', async (req, res) => {
+  try {
+    const { addressId } = req.params;
+    const { label, address_line, is_default, customer_id } = req.body;
+
+    // If this is set as default, unset all other defaults for this customer
+    if (is_default && customer_id) {
+      await pool.query(
+        'UPDATE Address SET is_default = FALSE WHERE customer_id = $1 AND address_id != $2',
+        [customer_id, addressId]
+      );
+    }
+
+    const result = await pool.query(
+      `UPDATE Address 
+       SET label = $1, address_line = $2, is_default = $3 
+       WHERE address_id = $4 
+       RETURNING address_id, customer_id, label, address_line, is_default`,
+      [label, address_line, is_default, addressId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Address not found' });
+    }
+
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('Error updating address:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Delete an address
+app.delete('/api/addresses/:addressId', async (req, res) => {
+  try {
+    const { addressId } = req.params;
+    
+    // Check if this is a default address
+    const checkDefault = await pool.query(
+      'SELECT is_default, customer_id FROM Address WHERE address_id = $1',
+      [addressId]
+    );
+
+    if (checkDefault.rows.length === 0) {
+      return res.status(404).json({ error: 'Address not found' });
+    }
+
+    const wasDefault = checkDefault.rows[0].is_default;
+    const customerId = checkDefault.rows[0].customer_id;
+
+    // Delete the address
+    await pool.query('DELETE FROM Address WHERE address_id = $1', [addressId]);
+
+    // If deleted address was default, set first remaining address as default
+    if (wasDefault) {
+      await pool.query(
+        `UPDATE Address 
+         SET is_default = TRUE 
+         WHERE address_id = (
+           SELECT address_id FROM Address 
+           WHERE customer_id = $1 
+           ORDER BY created_at ASC 
+           LIMIT 1
+         )`,
+        [customerId]
+      );
+    }
+
+    res.json({ message: 'Address deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting address:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Set default address
+app.put('/api/addresses/:addressId/set-default', async (req, res) => {
+  try {
+    const { addressId } = req.params;
+    
+    // Get customer_id for this address
+    const addressResult = await pool.query(
+      'SELECT customer_id FROM Address WHERE address_id = $1',
+      [addressId]
+    );
+
+    if (addressResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Address not found' });
+    }
+
+    const customerId = addressResult.rows[0].customer_id;
+
+    // Unset all defaults for this customer
+    await pool.query(
+      'UPDATE Address SET is_default = FALSE WHERE customer_id = $1',
+      [customerId]
+    );
+
+    // Set this address as default
+    const result = await pool.query(
+      `UPDATE Address 
+       SET is_default = TRUE 
+       WHERE address_id = $1 
+       RETURNING address_id, customer_id, label, address_line, is_default`,
+      [addressId]
+    );
+
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('Error setting default address:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ===========================
 // RESTAURANT ENDPOINTS
 // ===========================
 
@@ -298,7 +463,7 @@ app.get('/api/categories/:id/subcategories', async (req, res) => {
 // Create a new order
 app.post('/api/orders', async (req, res) => {
   try {
-    const { customer_id, restaurant_id, total_amount, delivery_address, items, special_instructions } = req.body;
+    const { customer_id, restaurant_id, total_amount, delivery_address, items, special_instructions, payment_method } = req.body;
 
     const client = await pool.connect();
     try {
@@ -322,6 +487,13 @@ app.post('/api/orders', async (req, res) => {
           [orderId, item.item_id, item.quantity, item.price]
         );
       }
+
+      // Insert payment record
+      await client.query(
+        `INSERT INTO Payment (order_id, payment_method, payment_status, amount)
+         VALUES ($1, $2, $3, $4)`,
+        [orderId, payment_method || 'COD', 'Pending', total_amount]
+      );
 
       await client.query('COMMIT');
       res.status(201).json(orderResult.rows[0]);

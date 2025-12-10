@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/customer.dart';
+import '../services/api_service.dart';
 
 class AddressesScreen extends StatefulWidget {
   final Customer customer;
@@ -12,45 +13,83 @@ class AddressesScreen extends StatefulWidget {
 
 class _AddressesScreenState extends State<AddressesScreen> {
   List<Map<String, dynamic>> addresses = [];
+  bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    // Initialize with customer's default address
-    addresses = [
-      {
-        'id': 1,
-        'label': 'Home',
-        'address': widget.customer.address,
-        'isDefault': true,
-      },
-    ];
+    _loadAddresses();
   }
 
-  void _addAddress() {
+  Future<void> _loadAddresses() async {
+    try {
+      setState(() => _isLoading = true);
+      final result = await ApiService.getCustomerAddresses(
+        widget.customer.customerId,
+      );
+      setState(() {
+        addresses = List<Map<String, dynamic>>.from(result);
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() => _isLoading = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error loading addresses: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _addAddress(String label, String address) async {
+    try {
+      await ApiService.addAddress(
+        customerId: widget.customer.customerId,
+        label: label,
+        addressLine: address,
+        isDefault: false,
+      );
+      _loadAddresses();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Address added successfully'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error adding address: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  void _showAddAddressDialog() {
     showDialog(
       context: context,
       builder:
           (context) => AddAddressDialog(
-            onAdd: (label, address) {
-              setState(() {
-                addresses.add({
-                  'id': addresses.length + 1,
-                  'label': label,
-                  'address': address,
-                  'isDefault': false,
-                });
-              });
-            },
+            onAdd: (label, address) => _addAddress(label, address),
           ),
     );
   }
 
-  void _deleteAddress(int index) {
-    if (addresses[index]['isDefault'] == true) {
+  Future<void> _deleteAddress(int addressId, bool isDefault) async {
+    if (isDefault) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Cannot delete default address'),
+          content: Text(
+            'Cannot delete default address. Set another address as default first.',
+          ),
           backgroundColor: Colors.red,
         ),
       );
@@ -71,17 +110,33 @@ class _AddressesScreenState extends State<AddressesScreen> {
                 child: const Text('Cancel'),
               ),
               TextButton(
-                onPressed: () {
-                  setState(() {
-                    addresses.removeAt(index);
-                  });
+                onPressed: () async {
                   Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Address deleted'),
-                      backgroundColor: Colors.green,
-                    ),
-                  );
+                  try {
+                    final success = await ApiService.deleteAddress(addressId);
+                    if (success) {
+                      _loadAddresses();
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Address deleted'),
+                            backgroundColor: Colors.green,
+                          ),
+                        );
+                      }
+                    } else {
+                      throw Exception('Delete failed');
+                    }
+                  } catch (e) {
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Error deleting address: $e'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                    }
+                  }
                 },
                 child: const Text(
                   'Delete',
@@ -93,19 +148,28 @@ class _AddressesScreenState extends State<AddressesScreen> {
     );
   }
 
-  void _setDefaultAddress(int index) {
-    setState(() {
-      for (var addr in addresses) {
-        addr['isDefault'] = false;
+  Future<void> _setDefaultAddress(int addressId) async {
+    try {
+      await ApiService.setDefaultAddress(addressId);
+      _loadAddresses();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Default address updated'),
+            backgroundColor: Colors.green,
+          ),
+        );
       }
-      addresses[index]['isDefault'] = true;
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Default address updated'),
-        backgroundColor: Colors.green,
-      ),
-    );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error updating default address: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   @override
@@ -115,106 +179,147 @@ class _AddressesScreenState extends State<AddressesScreen> {
         title: const Text('My Addresses'),
         backgroundColor: Colors.deepOrange,
       ),
-      body: ListView.builder(
-        padding: const EdgeInsets.all(16),
-        itemCount: addresses.length,
-        itemBuilder: (context, index) {
-          final address = addresses[index];
-          return Card(
-            margin: const EdgeInsets.only(bottom: 16),
-            elevation: 2,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(
-                            address['label'] == 'Home'
-                                ? Icons.home
-                                : address['label'] == 'Work'
-                                ? Icons.work
-                                : Icons.location_on,
-                            color: Colors.deepOrange,
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            address['label'],
-                            style: const TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          if (address['isDefault'] == true) ...[
-                            const SizedBox(width: 8),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 4,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.green.shade100,
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Text(
-                                'Default',
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  color: Colors.green.shade700,
-                                  fontWeight: FontWeight.bold,
+      body:
+          _isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : addresses.isEmpty
+              ? Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.location_off,
+                      size: 80,
+                      color: Colors.grey.shade400,
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'No addresses saved',
+                      style: TextStyle(
+                        fontSize: 18,
+                        color: Colors.grey.shade600,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Add your delivery addresses',
+                      style: TextStyle(color: Colors.grey.shade500),
+                    ),
+                  ],
+                ),
+              )
+              : RefreshIndicator(
+                onRefresh: _loadAddresses,
+                child: ListView.builder(
+                  padding: const EdgeInsets.all(16),
+                  itemCount: addresses.length,
+                  itemBuilder: (context, index) {
+                    final address = addresses[index];
+                    final addressId = address['address_id'];
+                    final isDefault = address['is_default'] == true;
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 16),
+                      elevation: 2,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Row(
+                                  children: [
+                                    Icon(
+                                      address['label'] == 'Home'
+                                          ? Icons.home
+                                          : address['label'] == 'Work'
+                                          ? Icons.work
+                                          : Icons.location_on,
+                                      color: Colors.deepOrange,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      address['label'],
+                                      style: const TextStyle(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    if (isDefault) ...[
+                                      const SizedBox(width: 8),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 4,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: Colors.green.shade100,
+                                          borderRadius: BorderRadius.circular(
+                                            12,
+                                          ),
+                                        ),
+                                        child: Text(
+                                          'Default',
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            color: Colors.green.shade700,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ],
                                 ),
+                                PopupMenuButton(
+                                  itemBuilder:
+                                      (context) => [
+                                        if (!isDefault)
+                                          const PopupMenuItem(
+                                            value: 'default',
+                                            child: Text('Set as default'),
+                                          ),
+                                        if (!isDefault)
+                                          const PopupMenuItem(
+                                            value: 'delete',
+                                            child: Text(
+                                              'Delete',
+                                              style: TextStyle(
+                                                color: Colors.red,
+                                              ),
+                                            ),
+                                          ),
+                                      ],
+                                  onSelected: (value) {
+                                    if (value == 'default') {
+                                      _setDefaultAddress(addressId);
+                                    } else if (value == 'delete') {
+                                      _deleteAddress(addressId, isDefault);
+                                    }
+                                  },
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              address['address_line'],
+                              style: TextStyle(
+                                color: Colors.grey.shade700,
+                                fontSize: 14,
                               ),
                             ),
                           ],
-                        ],
+                        ),
                       ),
-                      PopupMenuButton(
-                        itemBuilder:
-                            (context) => [
-                              if (address['isDefault'] != true)
-                                const PopupMenuItem(
-                                  value: 'default',
-                                  child: Text('Set as default'),
-                                ),
-                              if (address['isDefault'] != true)
-                                const PopupMenuItem(
-                                  value: 'delete',
-                                  child: Text(
-                                    'Delete',
-                                    style: TextStyle(color: Colors.red),
-                                  ),
-                                ),
-                            ],
-                        onSelected: (value) {
-                          if (value == 'default') {
-                            _setDefaultAddress(index);
-                          } else if (value == 'delete') {
-                            _deleteAddress(index);
-                          }
-                        },
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    address['address'],
-                    style: TextStyle(color: Colors.grey.shade700, fontSize: 14),
-                  ),
-                ],
+                    );
+                  },
+                ),
               ),
-            ),
-          );
-        },
-      ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: _addAddress,
+        onPressed: _showAddAddressDialog,
         backgroundColor: Colors.deepOrange,
         icon: const Icon(Icons.add, color: Colors.white),
         label: const Text('Add Address', style: TextStyle(color: Colors.white)),
