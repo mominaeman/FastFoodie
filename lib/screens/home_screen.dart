@@ -1,45 +1,219 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../models/customer.dart';
+import '../providers/cart_provider.dart';
+import 'profile_screen.dart';
+import 'orders_screen.dart';
+import 'addresses_screen.dart';
+import 'restaurants_screen.dart';
+import 'search_screen.dart';
+import 'cart_screen.dart';
+import 'login_screen.dart';
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   final Customer customer;
 
   const HomeScreen({Key? key, required this.customer}) : super(key: key);
 
   @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  int _selectedIndex = 0;
+  late List<Widget> _screens;
+
+  @override
+  void initState() {
+    super.initState();
+    _screens = [
+      RestaurantsScreen(customer: widget.customer),
+      SearchScreen(customer: widget.customer),
+      CartScreen(customer: widget.customer),
+    ];
+  }
+
+  void _onItemTapped(int index) {
+    setState(() {
+      _selectedIndex = index;
+    });
+  }
+
+  void _logout() {
+    showDialog(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Logout'),
+            content: const Text('Are you sure you want to logout?'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () {
+                  Navigator.of(context).pushAndRemoveUntil(
+                    MaterialPageRoute(
+                      builder: (context) => const LoginScreen(),
+                    ),
+                    (route) => false,
+                  );
+                },
+                child: const Text(
+                  'Logout',
+                  style: TextStyle(color: Colors.red),
+                ),
+              ),
+            ],
+          ),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Welcome, ${customer.name}'),
-        actions: [
-          IconButton(
-            icon: Icon(Icons.account_circle),
-            onPressed: () {
-              // TODO: Navigate to profile screen
-            },
-          ),
-        ],
+        title: const Text('FastFoodie'),
+        backgroundColor: Colors.deepOrange,
+        automaticallyImplyLeading: false,
       ),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+      endDrawer: Drawer(
+        child: ListView(
+          padding: EdgeInsets.zero,
           children: [
-            Icon(Icons.check_circle, size: 100, color: Colors.green),
-            SizedBox(height: 20),
-            Text(
-              'Login Successful!',
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+            UserAccountsDrawerHeader(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [Colors.deepOrange, Colors.orange],
+                ),
+              ),
+              accountName: Text(
+                widget.customer.name,
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              accountEmail: Text(widget.customer.email),
+              currentAccountPicture: CircleAvatar(
+                backgroundColor: Colors.white,
+                child: Text(
+                  widget.customer.name[0].toUpperCase(),
+                  style: const TextStyle(
+                    fontSize: 32,
+                    color: Colors.deepOrange,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
             ),
-            SizedBox(height: 10),
-            Text('Customer ID: ${customer.customerId}'),
-            Text('Email: ${customer.email}'),
-            SizedBox(height: 40),
-            Text(
-              'Home Screen Coming Soon...',
-              style: TextStyle(fontSize: 18, color: Colors.grey),
+            ListTile(
+              leading: const Icon(Icons.person, color: Colors.deepOrange),
+              title: const Text('View Profile'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder:
+                        (context) => ProfileScreen(customer: widget.customer),
+                  ),
+                );
+              },
+            ),
+            const Divider(),
+            ListTile(
+              leading: const Icon(Icons.shopping_bag, color: Colors.deepOrange),
+              title: const Text('My Orders'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder:
+                        (context) => OrdersScreen(customer: widget.customer),
+                  ),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.location_on, color: Colors.deepOrange),
+              title: const Text('Addresses'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder:
+                        (context) => AddressesScreen(customer: widget.customer),
+                  ),
+                );
+              },
+            ),
+            const Divider(),
+            ListTile(
+              leading: const Icon(Icons.logout, color: Colors.red),
+              title: const Text('Logout'),
+              onTap: _logout,
             ),
           ],
         ),
+      ),
+      body: _screens[_selectedIndex],
+      bottomNavigationBar: Consumer<CartProvider>(
+        builder: (context, cartProvider, child) {
+          return BottomNavigationBar(
+            currentIndex: _selectedIndex,
+            onTap: _onItemTapped,
+            selectedItemColor: Colors.deepOrange,
+            unselectedItemColor: Colors.grey,
+            type: BottomNavigationBarType.fixed,
+            items: [
+              const BottomNavigationBarItem(
+                icon: Icon(Icons.restaurant),
+                label: 'Food',
+              ),
+              const BottomNavigationBarItem(
+                icon: Icon(Icons.search),
+                label: 'Search',
+              ),
+              BottomNavigationBarItem(
+                icon: Stack(
+                  children: [
+                    const Icon(Icons.shopping_cart),
+                    if (cartProvider.itemCount > 0)
+                      Positioned(
+                        right: 0,
+                        top: 0,
+                        child: Container(
+                          padding: const EdgeInsets.all(2),
+                          decoration: const BoxDecoration(
+                            color: Colors.red,
+                            shape: BoxShape.circle,
+                          ),
+                          constraints: const BoxConstraints(
+                            minWidth: 16,
+                            minHeight: 16,
+                          ),
+                          child: Text(
+                            '${cartProvider.itemCount}',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+                label: 'Cart',
+              ),
+            ],
+          );
+        },
       ),
     );
   }
