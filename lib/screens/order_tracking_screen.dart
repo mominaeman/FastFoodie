@@ -27,6 +27,12 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen>
   late AnimationController _animationController;
   String orderStatus = 'pending';
 
+  // Rider info
+  String? riderName;
+  String? riderPhone;
+  String? vehicleType;
+  bool hasDeliveryInfo = false;
+
   final Map<String, int> statusToStep = {
     'pending': 0,
     'confirmed': 0,
@@ -82,13 +88,48 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen>
     try {
       final orderData = await ApiService.getOrderDetails(widget.orderId);
       if (mounted) {
+        final newStatus = orderData['status'] ?? 'pending';
+        print('🔍 Order ${widget.orderId} status: $newStatus');
+
         setState(() {
-          orderStatus = orderData['status'] ?? 'pending';
+          orderStatus = newStatus;
           currentStep = statusToStep[orderStatus] ?? 0;
         });
+
+        // Fetch delivery info if order is out for delivery or delivered
+        if (orderStatus == 'out_for_delivery' || orderStatus == 'delivered') {
+          print('🚚 Fetching delivery info for order ${widget.orderId}...');
+          await _fetchDeliveryInfo();
+        }
       }
     } catch (e) {
-      print('Error fetching order status: $e');
+      print('❌ Error fetching order status: $e');
+    }
+  }
+
+  Future<void> _fetchDeliveryInfo() async {
+    try {
+      print('📡 Calling getDeliveryForOrder(${widget.orderId})...');
+      final deliveryData = await ApiService.getDeliveryForOrder(widget.orderId);
+
+      if (deliveryData != null) {
+        print('✅ Delivery data received: $deliveryData');
+        if (mounted) {
+          setState(() {
+            riderName = deliveryData['rider_name'];
+            riderPhone = deliveryData['rider_phone'];
+            vehicleType = deliveryData['vehicle_type'];
+            hasDeliveryInfo = true;
+          });
+          print(
+            '✅ Rider info updated: $riderName ($vehicleType) - $riderPhone',
+          );
+        }
+      } else {
+        print('⚠️ No delivery data found for order ${widget.orderId}');
+      }
+    } catch (e) {
+      print('❌ Error fetching delivery info: $e');
     }
   }
 
@@ -136,128 +177,141 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen>
 
     showDialog(
       context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          title: const Column(
-            children: [
-              Icon(Icons.star, size: 40, color: Colors.amber),
-              SizedBox(height: 8),
-              Text(
-                'Rate Your Order',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-              ),
-            ],
-          ),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text(
-                  'How was your experience?',
-                  style: TextStyle(color: Colors.grey),
-                ),
-                const SizedBox(height: 16),
-                // Star Rating
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: List.generate(5, (index) {
-                    return IconButton(
-                      icon: Icon(
-                        index < selectedRating ? Icons.star : Icons.star_border,
-                        size: 40,
-                        color: Colors.amber,
+      builder:
+          (context) => StatefulBuilder(
+            builder:
+                (context, setState) => AlertDialog(
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  title: const Column(
+                    children: [
+                      Icon(Icons.star, size: 40, color: Colors.amber),
+                      SizedBox(height: 8),
+                      Text(
+                        'Rate Your Order',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
-                      onPressed: () {
-                        setState(() {
-                          selectedRating = index + 1;
-                        });
-                      },
-                    );
-                  }),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  selectedRating == 5
-                      ? 'Excellent!'
-                      : selectedRating == 4
-                          ? 'Good'
-                          : selectedRating == 3
+                    ],
+                  ),
+                  content: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Text(
+                          'How was your experience?',
+                          style: TextStyle(color: Colors.grey),
+                        ),
+                        const SizedBox(height: 16),
+                        // Star Rating
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: List.generate(5, (index) {
+                            return IconButton(
+                              icon: Icon(
+                                index < selectedRating
+                                    ? Icons.star
+                                    : Icons.star_border,
+                                size: 40,
+                                color: Colors.amber,
+                              ),
+                              onPressed: () {
+                                setState(() {
+                                  selectedRating = index + 1;
+                                });
+                              },
+                            );
+                          }),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          selectedRating == 5
+                              ? 'Excellent!'
+                              : selectedRating == 4
+                              ? 'Good'
+                              : selectedRating == 3
                               ? 'Average'
                               : selectedRating == 2
-                                  ? 'Below Average'
-                                  : 'Poor',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: selectedRating >= 4 ? Colors.green : Colors.orange,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                // Feedback TextField
-                TextField(
-                  controller: feedbackController,
-                  maxLines: 3,
-                  decoration: InputDecoration(
-                    hintText: 'Share your feedback (optional)',
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(
-                        color: Colors.deepOrange,
-                        width: 2,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.pop(context);
-                // Show thank you message
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Row(
-                      children: [
-                        const Icon(Icons.check_circle, color: Colors.white),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Thank you for your $selectedRating-star rating!',
+                              ? 'Below Average'
+                              : 'Poor',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color:
+                                selectedRating >= 4
+                                    ? Colors.green
+                                    : Colors.orange,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        // Feedback TextField
+                        TextField(
+                          controller: feedbackController,
+                          maxLines: 3,
+                          decoration: InputDecoration(
+                            hintText: 'Share your feedback (optional)',
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: const BorderSide(
+                                color: Colors.deepOrange,
+                                width: 2,
+                              ),
+                            ),
+                          ),
                         ),
                       ],
                     ),
-                    backgroundColor: Colors.green,
-                    duration: const Duration(seconds: 3),
                   ),
-                );
-                // TODO: Send rating to backend
-                // ApiService.rateOrder(widget.orderId, selectedRating, feedbackController.text);
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.deepOrange,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('Cancel'),
+                    ),
+                    ElevatedButton(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        // Show thank you message
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Row(
+                              children: [
+                                const Icon(
+                                  Icons.check_circle,
+                                  color: Colors.white,
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Thank you for your $selectedRating-star rating!',
+                                ),
+                              ],
+                            ),
+                            backgroundColor: Colors.green,
+                            duration: const Duration(seconds: 3),
+                          ),
+                        );
+                        // TODO: Send rating to backend
+                        // ApiService.rateOrder(widget.orderId, selectedRating, feedbackController.text);
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.deepOrange,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      child: const Text(
+                        'Submit',
+                        style: TextStyle(color: Colors.white),
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-              child: const Text(
-                'Submit',
-                style: TextStyle(color: Colors.white),
-              ),
-            ),
-          ],
-        ),
-      ),
+          ),
     );
   }
 
@@ -322,6 +376,105 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen>
               ],
             ),
           ),
+
+          // Rider Info Card (show when delivery is assigned)
+          if (hasDeliveryInfo && riderName != null)
+            Container(
+              margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.grey.shade300,
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 60,
+                      height: 60,
+                      decoration: BoxDecoration(
+                        color: Colors.deepOrange.shade100,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.delivery_dining,
+                        size: 32,
+                        color: Colors.deepOrange,
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Your Delivery Rider',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            riderName!,
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.black87,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.two_wheeler,
+                                size: 16,
+                                color: Colors.grey.shade600,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                vehicleType ?? 'bike',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.grey.shade600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (riderPhone != null)
+                      Container(
+                        decoration: BoxDecoration(
+                          color: Colors.green.shade50,
+                          shape: BoxShape.circle,
+                        ),
+                        child: IconButton(
+                          icon: const Icon(Icons.phone, color: Colors.green),
+                          onPressed: () {
+                            // In real app, use url_launcher to call
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Call rider: $riderPhone'),
+                                backgroundColor: Colors.green,
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
 
           // Order Status Timeline
           Expanded(
@@ -496,7 +649,9 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen>
                       // Navigate back to home screen
                       Navigator.of(context).pushAndRemoveUntil(
                         MaterialPageRoute(
-                          builder: (context) => HomeScreen(customer: widget.customer),
+                          builder:
+                              (context) =>
+                                  HomeScreen(customer: widget.customer),
                         ),
                         (route) => false,
                       );
@@ -519,7 +674,8 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen>
                     ),
                   ),
                 ),
-                if (currentStep == orderSteps.length - 1) const SizedBox(height: 8),
+                if (currentStep == orderSteps.length - 1)
+                  const SizedBox(height: 8),
                 if (currentStep == orderSteps.length - 1)
                   OutlinedButton.icon(
                     onPressed: () => _showRatingDialog(),

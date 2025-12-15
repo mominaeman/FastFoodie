@@ -9,6 +9,7 @@ import 'restaurants_screen.dart';
 import 'search_screen.dart';
 import 'cart_screen.dart';
 import 'login_screen.dart';
+import 'admin_database_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   final Customer customer;
@@ -152,6 +153,26 @@ class _HomeScreenState extends State<HomeScreen> {
               },
             ),
             const Divider(),
+            // Admin only: Database Inspector
+            if (widget.customer.isAdmin)
+              ListTile(
+                leading: const Icon(Icons.storage, color: Colors.deepPurple),
+                title: const Text('Database Inspector'),
+                subtitle: const Text(
+                  'Admin: View table data',
+                  style: TextStyle(fontSize: 12),
+                ),
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const AdminDatabaseScreen(),
+                    ),
+                  );
+                },
+              ),
+            if (widget.customer.isAdmin) const Divider(),
             ListTile(
               leading: const Icon(Icons.logout, color: Colors.red),
               title: const Text('Logout'),

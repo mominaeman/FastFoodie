@@ -349,4 +349,53 @@ class ApiService {
       rethrow;
     }
   }
+
+  // ============================================
+  // DELIVERY ENDPOINTS
+  // ============================================
+
+  // Get delivery info for an order
+  static Future<Map<String, dynamic>?> getDeliveryForOrder(int orderId) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/orders/$orderId/delivery'),
+      );
+
+      if (response.statusCode == 200) {
+        return json.decode(response.body);
+      } else if (response.statusCode == 404) {
+        // Delivery not assigned yet
+        return null;
+      } else {
+        throw Exception('Failed to get delivery info');
+      }
+    } catch (e) {
+      print('Error fetching delivery info: $e');
+      return null;
+    }
+  }
+
+  // ============================================
+  // ADMIN ENDPOINTS - Database Inspection
+  // ============================================
+
+  // Get table statistics
+  static Future<List<dynamic>> getTableStats() async {
+    try {
+      return await get('/admin/table-stats');
+    } catch (e) {
+      print('Error fetching table stats: $e');
+      rethrow;
+    }
+  }
+
+  // Get data from specific table
+  static Future<List<dynamic>> getTableData(String tableName) async {
+    try {
+      return await get('/admin/table/$tableName');
+    } catch (e) {
+      print('Error fetching table data: $e');
+      rethrow;
+    }
+  }
 }

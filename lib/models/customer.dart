@@ -5,6 +5,7 @@ class Customer {
   final String phone;
   final String address;
   final DateTime? createdAt;
+  final bool isAdmin;
 
   Customer({
     required this.customerId,
@@ -13,19 +14,25 @@ class Customer {
     required this.phone,
     required this.address,
     this.createdAt,
+    this.isAdmin = false,
   });
 
   factory Customer.fromJson(Map<String, dynamic> json) {
+    // Check if user is admin (specific email or from database)
+    final email = json['email'] ?? '';
+    final isAdmin = email == 'admin@fastfoodie.com' || json['is_admin'] == true;
+
     return Customer(
       customerId: json['customer_id'] ?? json['customerId'] ?? 0,
       name: json['name'] ?? '',
-      email: json['email'] ?? '',
+      email: email,
       phone: json['phone'] ?? '',
       address: json['address'] ?? '',
       createdAt:
           json['created_at'] != null
               ? DateTime.parse(json['created_at'])
               : null,
+      isAdmin: isAdmin,
     );
   }
 
@@ -37,6 +44,7 @@ class Customer {
       'phone': phone,
       'address': address,
       'created_at': createdAt?.toIso8601String(),
+      'is_admin': isAdmin,
     };
   }
 
@@ -47,6 +55,7 @@ class Customer {
     String? phone,
     String? address,
     DateTime? createdAt,
+    bool? isAdmin,
   }) {
     return Customer(
       customerId: customerId ?? this.customerId,
@@ -55,6 +64,7 @@ class Customer {
       phone: phone ?? this.phone,
       address: address ?? this.address,
       createdAt: createdAt ?? this.createdAt,
+      isAdmin: isAdmin ?? this.isAdmin,
     );
   }
 }
