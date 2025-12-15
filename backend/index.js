@@ -566,25 +566,95 @@ app.get('/api/orders/:id', async (req, res) => {
   }
 });
 
-// Update order status
+// Update order status with automatic rider assignment
 app.patch('/api/orders/:id/status', async (req, res) => {
   try {
     const { id } = req.params;
     const { status } = req.body;
 
-    const result = await pool.query(
-      `UPDATE Orders 
-       SET status = $1, updated_at = CURRENT_TIMESTAMP 
-       WHERE order_id = $2 
-       RETURNING *`,
-      [status, id]
-    );
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
 
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Order not found' });
+      // Update order status
+      const result = await client.query(
+        `UPDATE Orders 
+         SET status = $1, updated_at = CURRENT_TIMESTAMP 
+         WHERE order_id = $2 
+         RETURNING *`,
+        [status, id]
+      );
+
+      if (result.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ error: 'Order not found' });
+      }
+
+      // Auto-assign rider when status changes to "out_for_delivery"
+      if (status === 'out_for_delivery') {
+        // Check if delivery already exists
+        const existingDelivery = await client.query(
+          'SELECT * FROM delivery WHERE order_id = $1',
+          [id]
+        );
+
+        if (existingDelivery.rows.length === 0) {
+          // Get an available rider
+          const availableRider = await client.query(
+            'SELECT * FROM rider WHERE is_available = true LIMIT 1'
+          );
+
+          if (availableRider.rows.length > 0) {
+            const riderId = availableRider.rows[0].rider_id;
+
+            // Create delivery record
+            await client.query(
+              `INSERT INTO delivery (order_id, rider_id, status, pickup_time)
+               VALUES ($1, $2, 'picked_up', CURRENT_TIMESTAMP)`,
+              [id, riderId]
+            );
+
+            // Mark rider as unavailable
+            await client.query(
+              'UPDATE rider SET is_available = false WHERE rider_id = $1',
+              [riderId]
+            );
+
+            console.log(`✅ Auto-assigned rider ${riderId} to order ${id}`);
+          } else {
+            console.log(`⚠️ No available riders for order ${id}`);
+          }
+        }
+      }
+
+      // Auto-complete delivery when order is delivered
+      if (status === 'delivered') {
+        const deliveryResult = await client.query(
+          `UPDATE delivery 
+           SET status = 'delivered', delivery_time = CURRENT_TIMESTAMP 
+           WHERE order_id = $1 AND status != 'delivered'
+           RETURNING rider_id`,
+          [id]
+        );
+
+        if (deliveryResult.rows.length > 0) {
+          // Make rider available again
+          await client.query(
+            'UPDATE rider SET is_available = true WHERE rider_id = $1',
+            [deliveryResult.rows[0].rider_id]
+          );
+          console.log(`✅ Marked rider ${deliveryResult.rows[0].rider_id} as available`);
+        }
+      }
+
+      await client.query('COMMIT');
+      res.json(result.rows[0]);
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
     }
-
-    res.json(result.rows[0]);
   } catch (error) {
     console.error('Error updating order status:', error);
     res.status(500).json({ error: error.message });
@@ -630,6 +700,260 @@ app.get('/api/orders/:orderId/payment', async (req, res) => {
     res.json(result.rows[0]);
   } catch (error) {
     console.error('Error fetching payment:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================
+// RIDER ENDPOINTS
+// ============================================
+
+// Get all available riders
+app.get('/api/riders/available', async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT * FROM rider WHERE is_available = true ORDER BY rider_id`
+    );
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Error fetching available riders:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get all riders
+app.get('/api/riders', async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT * FROM rider ORDER BY rider_id`
+    );
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Error fetching riders:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Update rider availability
+app.patch('/api/riders/:id/availability', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { is_available } = req.body;
+
+    const result = await pool.query(
+      `UPDATE rider SET is_available = $1 WHERE rider_id = $2 RETURNING *`,
+      [is_available, id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Rider not found' });
+    }
+
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('Error updating rider availability:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================
+// DELIVERY ENDPOINTS
+// ============================================
+
+// Assign rider to order (create delivery)
+app.post('/api/deliveries', async (req, res) => {
+  try {
+    const { order_id, rider_id } = req.body;
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      // Create delivery record
+      const deliveryResult = await client.query(
+        `INSERT INTO delivery (order_id, rider_id, status)
+         VALUES ($1, $2, 'assigned')
+         RETURNING *`,
+        [order_id, rider_id]
+      );
+
+      // Update order status to out_for_delivery
+      await client.query(
+        `UPDATE Orders SET status = 'out_for_delivery', updated_at = CURRENT_TIMESTAMP 
+         WHERE order_id = $1`,
+        [order_id]
+      );
+
+      // Mark rider as unavailable
+      await client.query(
+        `UPDATE rider SET is_available = false WHERE rider_id = $1`,
+        [rider_id]
+      );
+
+      await client.query('COMMIT');
+      res.status(201).json(deliveryResult.rows[0]);
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error('Error creating delivery:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Update delivery status
+app.patch('/api/deliveries/:id/status', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      // Update delivery status
+      const deliveryResult = await client.query(
+        `UPDATE delivery 
+         SET status = $1,
+             pickup_time = CASE WHEN $1 = 'picked_up' THEN CURRENT_TIMESTAMP ELSE pickup_time END,
+             delivery_time = CASE WHEN $1 = 'delivered' THEN CURRENT_TIMESTAMP ELSE delivery_time END
+         WHERE delivery_id = $2
+         RETURNING *`,
+        [status, id]
+      );
+
+      if (deliveryResult.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ error: 'Delivery not found' });
+      }
+
+      const delivery = deliveryResult.rows[0];
+
+      // Update order status
+      let orderStatus = 'preparing';
+      if (status === 'picked_up') orderStatus = 'out_for_delivery';
+      if (status === 'delivered') orderStatus = 'delivered';
+
+      await client.query(
+        `UPDATE Orders SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE order_id = $2`,
+        [orderStatus, delivery.order_id]
+      );
+
+      // If delivered, mark rider as available again
+      if (status === 'delivered') {
+        await client.query(
+          `UPDATE rider SET is_available = true WHERE rider_id = $1`,
+          [delivery.rider_id]
+        );
+      }
+
+      await client.query('COMMIT');
+      res.json(delivery);
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error('Error updating delivery status:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get delivery details for an order
+app.get('/api/orders/:orderId/delivery', async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    
+    const result = await pool.query(
+      `SELECT d.*, r.name as rider_name, r.phone as rider_phone, r.vehicle_type
+       FROM delivery d
+       JOIN rider r ON d.rider_id = r.rider_id
+       WHERE d.order_id = $1`,
+      [orderId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Delivery not found for this order' });
+    }
+
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('Error fetching delivery:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get rider's active deliveries
+app.get('/api/riders/:id/deliveries', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const result = await pool.query(
+      `SELECT d.*, o.delivery_address, o.total_amount, r.name as restaurant_name
+       FROM delivery d
+       JOIN Orders o ON d.order_id = o.order_id
+       JOIN Restaurant r ON o.restaurant_id = r.restaurant_id
+       WHERE d.rider_id = $1 AND d.status != 'delivered'
+       ORDER BY d.delivery_id DESC`,
+      [id]
+    );
+
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Error fetching rider deliveries:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================
+// DATABASE ADMIN ENDPOINTS
+// ============================================
+
+// Get table statistics (row counts)
+app.get('/api/admin/table-stats', async (req, res) => {
+  try {
+    const stats = await pool.query(`
+      SELECT 
+        'customer' AS table_name, COUNT(*) AS row_count FROM customer
+      UNION ALL SELECT 'address', COUNT(*) FROM address
+      UNION ALL SELECT 'restaurant', COUNT(*) FROM restaurant
+      UNION ALL SELECT 'category', COUNT(*) FROM category
+      UNION ALL SELECT 'sub_category', COUNT(*) FROM sub_category
+      UNION ALL SELECT 'menu_item', COUNT(*) FROM menu_item
+      UNION ALL SELECT 'orders', COUNT(*) FROM orders
+      UNION ALL SELECT 'order_item', COUNT(*) FROM order_item
+      UNION ALL SELECT 'payment', COUNT(*) FROM payment
+      UNION ALL SELECT 'rider', COUNT(*) FROM rider
+      UNION ALL SELECT 'delivery', COUNT(*) FROM delivery
+      ORDER BY table_name
+    `);
+    res.json(stats.rows);
+  } catch (error) {
+    console.error('Error fetching table stats:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get data from specific table
+app.get('/api/admin/table/:tableName', async (req, res) => {
+  try {
+    const { tableName } = req.params;
+    const allowedTables = ['customer', 'address', 'restaurant', 'category', 'sub_category', 
+                           'menu_item', 'orders', 'order_item', 'payment', 'rider', 'delivery'];
+    
+    if (!allowedTables.includes(tableName.toLowerCase())) {
+      return res.status(400).json({ error: 'Invalid table name' });
+    }
+
+    const result = await pool.query(`SELECT * FROM ${tableName} LIMIT 100`);
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Error fetching table data:', error);
     res.status(500).json({ error: error.message });
   }
 });
