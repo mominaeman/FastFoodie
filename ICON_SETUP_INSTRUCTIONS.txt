@@ -1,0 +1,37 @@
+FastFoodie App Icon Setup Instructions
+========================================
+
+STEP 1: Save the FastFoodie Logo
+---------------------------------
+1. Right-click on the FastFoodie logo image you have
+2. Save it as: D:\dbms_project\food_delivery_sys\assets\icon.png
+3. Make sure the file is named exactly "icon.png"
+4. Recommended size: 1024x1024 pixels (the system will resize automatically)
+
+STEP 2: Generate App Icons
+---------------------------
+After saving the icon.png file, run this command in the terminal:
+
+    cd D:\dbms_project\food_delivery_sys
+    flutter pub run flutter_launcher_icons
+
+This will automatically generate all the required icon sizes for Android.
+
+STEP 3: Rebuild and Install the App
+------------------------------------
+    flutter build apk --release
+    flutter install -d RF8T405JR2R
+
+RESULT:
+-------
+✓ App name will show as "FastFoodie" (already configured)
+✓ App icon will show the FastFoodie burger delivery logo
+
+CURRENT STATUS:
+---------------
+✓ AndroidManifest.xml already has "FastFoodie" as the app name
+✓ pubspec.yaml configured with flutter_launcher_icons
+✓ Assets folder created
+✗ Icon image needs to be saved manually (see STEP 1)
+
+Once you complete STEP 1, run the commands in STEP 2 and STEP 3.

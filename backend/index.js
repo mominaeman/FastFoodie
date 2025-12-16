@@ -958,7 +958,8 @@ app.get('/api/admin/table/:tableName', async (req, res) => {
   }
 });
 
-// Start server
-app.listen(port, () => {
-  console.log(`🚀 FastFoodie API running on http://localhost:${port}`);
+// Start server - Listen on all network interfaces for mobile access
+app.listen(port, '0.0.0.0', () => {
+  console.log(`🚀 FastFoodie API running on http://0.0.0.0:${port}`);
+  console.log(`📱 Mobile access: http://192.168.100.8:${port}`);
 });
