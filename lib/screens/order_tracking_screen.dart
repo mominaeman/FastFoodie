@@ -646,7 +646,7 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen>
                   width: double.infinity,
                   child: ElevatedButton.icon(
                     onPressed: () {
-                      // Navigate back to home screen
+                      // Navigate back to home screen (restaurants tab)
                       Navigator.of(context).pushAndRemoveUntil(
                         MaterialPageRoute(
                           builder:
@@ -656,9 +656,12 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen>
                         (route) => false,
                       );
                     },
-                    icon: const Icon(Icons.home, color: Colors.white),
+                    icon: const Icon(
+                      Icons.restaurant_menu,
+                      color: Colors.white,
+                    ),
                     label: const Text(
-                      'Back to Home',
+                      'Browse Restaurants',
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,

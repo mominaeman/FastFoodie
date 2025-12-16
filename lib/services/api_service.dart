@@ -3,9 +3,9 @@ import 'package:http/http.dart' as http;
 
 class ApiService {
   // Change this to your deployed API URL when ready
-  // For local testing: 'http://localhost:3000/api'
+  // For local testing with phone: Use your PC's IP address
   // For production: 'https://your-app.run.app/api'
-  static const String baseUrl = 'http://localhost:3000/api';
+  static const String baseUrl = 'http://192.168.100.8:3000/api';
 
   // Generic GET request
   static Future<dynamic> get(String endpoint) async {
